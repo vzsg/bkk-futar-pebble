@@ -55,8 +55,11 @@ FutarService.prototype.getStopsForLocation = function (lat, lon, radius, callbac
         
         for (var i = 0; i < data.length; ++i) {
             var dataItem = data[i],
-                routeIds = dataItem.routeIds || [],
-                stopName = fixAccents(dataItem.name),
+                routeIds = dataItem.routeIds || [];
+            
+            if (!routeIds.length) continue;
+
+            var stopName = fixAccents(dataItem.name),
                 matchingRoutes = routeIds.map(lookupRoute),
                 routeNames = matchingRoutes.map(getRouteName),
                 uniqueRouteNames = [];
@@ -195,13 +198,13 @@ FutarController.prototype.refreshStops = function() {
     this.setRetryAction(null);
     
     this.service.acquireLocation(function (res) {
-        controller.setRetryAction('stop');
-
         if (res.error) {
             controller.statusCard.body(res.error);
         } else {
             controller.statusCard.body('Searching for nearby stops...');
             controller.service.getStopsForLocation(res.lat, res.lon, 200, function (stopsRes) {
+                controller.setRetryAction('stop');
+
                 if (stopsRes.error) {
                     controller.statusCard.body(stopsRes.error);
                 } else {
@@ -225,7 +228,7 @@ FutarController.prototype.refreshStops = function() {
 };
 
 FutarController.prototype.showDeparturesForStop = function(selectEvent) {
-    var controller = this, stopId = selectEvent.item.stop.id, stopName = selectEvent.item.title;
+    var controller = this, stopId = selectEvent.item.stop.id, stopName = selectEvent.item.stop.name;
     
     console.log('CTRL: Updating departures for stop: ' + stopId);
     this.statusCard.body('Loading departures for ' + stopName);
