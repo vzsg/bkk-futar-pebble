@@ -1,11 +1,15 @@
 var UI = require('ui'),
     ajax = require('ajax');
 
-var appTitle = 'BKK FUTÁR';
+var appTitle = 'PEBFUTÁR';
 
 /// Utilities
 function fixAccents(str) {
     return decodeURIComponent(escape(str));    
+}
+
+function digitsToString(digit) {
+    return digit < 10 ? "0" + digit : String(digit);
 }
 
 /// Service class
@@ -22,7 +26,7 @@ FutarService.prototype.acquireLocation = function (callback) {
     };
     
     console.log('SRV: Acquiring location...');
-    window.navigator.geolocation.getCurrentPosition(
+    navigator.geolocation.getCurrentPosition(
         function (pos) {
             console.log('SRV: Location: ' + pos.coords.latitude + ', ' +  pos.coords.longitude);
             callback({ lat: pos.coords.latitude, lon: pos.coords.longitude});
@@ -123,9 +127,10 @@ FutarService.prototype.getDeparturesForStop = function(stopId, callback) {
             predictTime = dataItem.predictedArrivalTime || dataItem.scheduledArrivalTime || 0;
             
             var item = {
-                title: '(' + (predictTime ? (Math.ceil((predictTime - d.currentTime) / (60 * 1000)) + "'") : '?') + ') - ' + fixAccents(dataItem.routeShortName),
+                title: (predictTime ? (Math.ceil((predictTime - d.currentTime) / (60 * 1000)) + "'") : '?') + ' - ' + fixAccents(dataItem.routeShortName),
                 subtitle: '> ' + fixAccents(dataItem.tripHeadsign),
                 extras: {
+                    tripName: fixAccents(dataItem.routeShortName) + ' > ' + fixAccents(dataItem.tripHeadsign),
                     routeId: dataItem.routeId,
                     tripId: dataItem.tripId
                 }
@@ -152,6 +157,49 @@ FutarService.prototype.getDeparturesForStop = function(stopId, callback) {
     ajax(adUrl, parseDepartures, reportError);
 };
 
+FutarService.prototype.getTripDetails = function (tripId, callback) {
+    var detailUrl = this.apiBaseUrl + 'trip-details.json' +
+        '?tripId=' + tripId;
+    
+    function parseStops(raw) {
+        var dataObj = JSON.parse(raw),
+            data = dataObj.data.entry.stopTimes || [],
+            stops = [],
+            refStops = dataObj.data.references.stops || {};
+        
+        for (var i = 0; i < data.length; ++i) {
+            var dataItem = data[i], stop = refStops[dataItem.stopId],
+                stopName = fixAccents(stop.name),
+                arrivalTime = new Date((dataItem.predictedArrivalTime || dataItem.arrivalTime || dataItem.predictedDepartureTime || dataItem.departureTime) * 1000),
+                arrivalHours = digitsToString(arrivalTime.getHours()), arrivalMinutes = digitsToString(arrivalTime.getMinutes());
+                
+            var item = {
+                title: arrivalHours + ":" + arrivalMinutes,
+                subtitle: stopName,
+                trip: dataItem
+            };
+            
+            stops.push(item);
+        }
+        
+        console.log('SRV: Found ' + stops.length + ' stops.');
+        callback({ items: stops });
+    }
+    
+    function reportError(error) {
+        if (error.message) {
+            console.warn('SRV: Trip details request failed: ' + error.message);
+            callback({ error: error.message });
+        } else {
+            console.warn('SRV: Trip details request failed: unknown');
+            callback({ error: 'Communication error!'});
+        } 
+    }
+
+    console.log('SRV: Trip details request started: ' + detailUrl);
+    ajax(detailUrl, parseStops, reportError);                        
+};
+
 /// Controller
 function FutarController(service) {
     console.log('CTRL: <init>');
@@ -160,12 +208,14 @@ function FutarController(service) {
     this.departureMenu = new UI.Menu();
     this.statusCard = new UI.Card({ title: appTitle });
     this.stopDetailCard = new UI.Card({ scrollable: true, style: 'small' });
+    this.tripDetailsMenu = new UI.Menu();
     this.retryAction = null;
 
     this.stopMenu.on('select', this.showDeparturesForStop.bind(this));
     this.stopMenu.on('longSelect', this.showDetailsForStop.bind(this));
     this.stopMenu.on('accelTap', this.refreshStops.bind(this));
     this.departureMenu.on('accelTap', this.refreshDepartures.bind(this));
+    this.departureMenu.on('select', this.showTripDetails.bind(this));
     this.statusCard.on('click', this.retryLastCall.bind(this));
 }
 
@@ -202,7 +252,7 @@ FutarController.prototype.refreshStops = function() {
             controller.statusCard.body(res.error);
         } else {
             controller.statusCard.body('Searching for nearby stops...');
-            controller.service.getStopsForLocation(res.lat, res.lon, 200, function (stopsRes) {
+            controller.service.getStopsForLocation(res.lat, res.lon, 400, function (stopsRes) {
                 controller.setRetryAction('stop');
 
                 if (stopsRes.error) {
@@ -284,6 +334,37 @@ FutarController.prototype.showDetailsForStop = function(selectEvent) {
     this.stopDetailCard.show();
 };
 
+FutarController.prototype.showTripDetails = function(selectEvent) {
+    var controller = this, tripId = selectEvent.item.extras.tripId, tripName = selectEvent.item.extras.tripName;
+    
+    console.log('CTRL: Loading trip details for: ' + tripId);
+    this.statusCard.body('Loading stops for ' + tripName);
+    this.statusCard.show();
+    this.tripDetailsMenu.hide();
+
+    this.setRetryAction(null);
+    this.currentDetailEvent = selectEvent;
+    this.service.getTripDetails(tripId, function (res) {
+        if (res.error) {
+            controller.statusCard.body(res.error);
+        } else {
+            if (res.items.length) {
+                controller.tripDetailsMenu.section(0, {
+                    title: tripName,
+                    items: res.items
+                });
+
+                controller.statusCard.hide();
+                controller.tripDetailsMenu.show();
+            } else {
+                controller.statusCard.body('No stops found.');
+            }
+
+            console.log('CTRL: Trip details loaded.');
+        }
+    });    
+};
+
 /// Application
 function FutarApplication() {
     console.log('APP: <init>');
@@ -293,6 +374,7 @@ function FutarApplication() {
 
 FutarApplication.prototype.start = function() {
     console.log('APP: starting...');
+    console.log('Phone language is ' + navigator.language);
     this.controller.refreshStops();
 };
 

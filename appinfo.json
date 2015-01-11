@@ -4,7 +4,7 @@
         "location"
     ],
     "companyName": "Zsolt Varadi",
-    "longName": "BKK FUT\u00c1R",
+    "longName": "FUT\u00c1R for Pebble",
     "projectType": "pebblejs",
     "resources": {
         "media": [
@@ -41,10 +41,10 @@
             }
         ]
     },
-    "shortName": "BKK FUT\u00c1R",
+    "shortName": "PEBFUT\u00c1R",
     "uuid": "b2c43b45-87fa-41a8-b95f-150e737a6981",
     "versionCode": 1,
-    "versionLabel": "1.1",
+    "versionLabel": "1.2",
     "watchapp": {
         "watchface": false
     }
