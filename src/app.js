@@ -3,7 +3,39 @@ var UI = require('ui'),
 
 var appTitle = 'PEBFUTÁR';
 
+var localization = {
+    'en': {
+        'error_generic_comm': 'Communication error!',
+        'msg_location': 'Acquiring location…',
+        'msg_stop_search': 'Searching for nearby stops…',
+        'title_nearby_stops': 'Nearby stops',
+        'msg_no_stops_nearby': 'No stops found nearby.',
+        'msg_no_departures': 'No departures found from this stop.',
+        'msg_no_stops': 'No stops found for this trip.',
+        'msg_trip_loading_format': 'Loading stops for {trip}…',
+        'msg_departure_loading_format': 'Loading departures for {stop}…'
+    },
+    
+    'hu': {
+        'error_generic_comm': 'Kommunikációs hiba!',
+        'msg_location': 'Helymeghatározás…',
+        'msg_stop_search': 'Megállók keresése…',
+        'title_nearby_stops': 'Megállók a közelben',
+        'msg_no_stops_nearby': 'Nincs megálló a közelben.',
+        'msg_no_departures': 'Nem indulnak járatok ebből a megállóból.',
+        'msg_no_stops': 'Nincs megálló a kért járathoz.',
+        'msg_trip_loading_format': 'Megállók keresése a {trip} járathoz…',
+        'msg_departure_loading_format': 'Járatok keresése a {stop} megállóban…'
+    }
+};
+
+
 /// Utilities
+function loc(key) {
+    var dict = localization[navigator.language] || localization.en;
+    return dict[key] || localization.en[key] || key;
+}
+
 function fixAccents(str) {
     return decodeURIComponent(escape(str));    
 }
@@ -29,7 +61,7 @@ FutarService.prototype.acquireLocation = function (callback) {
     navigator.geolocation.getCurrentPosition(
         function (pos) {
             console.log('SRV: Location: ' + pos.coords.latitude + ', ' +  pos.coords.longitude);
-            callback({ lat: pos.coords.latitude, lon: pos.coords.longitude});
+            callback({ lat: pos.coords.latitude, lon: pos.coords.longitude });
         },
         function (err) {
             console.warn('SRV: Location error (' + err.code + '): ' + err.message);
@@ -100,7 +132,7 @@ FutarService.prototype.getStopsForLocation = function (lat, lon, radius, callbac
             callback({ error: error.message });
         } else {
             console.warn('SRV: Stops request failed: unknown');
-            callback({ error: 'Communication error!'});
+            callback({ error: loc('error_generic_comm') });
         } 
     }
 
@@ -149,7 +181,7 @@ FutarService.prototype.getDeparturesForStop = function(stopId, callback) {
             callback({ error: error.message });
         } else {
             console.warn('SRV: Departures request failed: unknown');
-            callback({ error: 'Communication error!'});
+            callback({ error: loc('error_generic_comm') });
         } 
     }
     
@@ -192,7 +224,7 @@ FutarService.prototype.getTripDetails = function (tripId, callback) {
             callback({ error: error.message });
         } else {
             console.warn('SRV: Trip details request failed: unknown');
-            callback({ error: 'Communication error!'});
+            callback({ error: loc('error_generic_comm') });
         } 
     }
 
@@ -242,7 +274,7 @@ FutarController.prototype.refreshStops = function() {
     
     console.log('CTRL: Updating nearby stops...');
 
-    this.statusCard.body('Acquiring location...');
+    this.statusCard.body(loc('msg_location'));
     this.statusCard.show();
     this.stopMenu.hide();
     this.setRetryAction(null);
@@ -251,7 +283,7 @@ FutarController.prototype.refreshStops = function() {
         if (res.error) {
             controller.statusCard.body(res.error);
         } else {
-            controller.statusCard.body('Searching for nearby stops...');
+            controller.statusCard.body(loc('msg_stop_search'));
             controller.service.getStopsForLocation(res.lat, res.lon, 400, function (stopsRes) {
                 controller.setRetryAction('stop');
 
@@ -260,14 +292,14 @@ FutarController.prototype.refreshStops = function() {
                 } else {
                     if (stopsRes.items.length) {
                         controller.stopMenu.section(0, {
-                            title: 'Nearby stops',
+                            title: loc('title_nearby_stops'),
                             items: stopsRes.items
                         });
 
                         controller.statusCard.hide();
                         controller.stopMenu.show();
                     } else {
-                        controller.statusCard.body('No stops found nearby.');
+                        controller.statusCard.body(loc('msg_no_stops_nearby'));
                     }
 
                     console.log('CTRL: Stop update complete.');
@@ -281,7 +313,7 @@ FutarController.prototype.showDeparturesForStop = function(selectEvent) {
     var controller = this, stopId = selectEvent.item.stop.id, stopName = selectEvent.item.stop.name;
     
     console.log('CTRL: Updating departures for stop: ' + stopId);
-    this.statusCard.body('Loading departures for ' + stopName);
+    this.statusCard.body(loc('msg_departure_loading_format').replace('{stop}', stopName));
     this.statusCard.show();
     this.departureMenu.hide();
 
@@ -302,7 +334,7 @@ FutarController.prototype.showDeparturesForStop = function(selectEvent) {
                 controller.statusCard.hide();
                 controller.departureMenu.show();
             } else {
-                controller.statusCard.body('No departures found.');
+                controller.statusCard.body(loc('msg_no_departures'));
             }
 
             console.log('CTRL: Departure update complete.');
@@ -338,7 +370,7 @@ FutarController.prototype.showTripDetails = function(selectEvent) {
     var controller = this, tripId = selectEvent.item.extras.tripId, tripName = selectEvent.item.extras.tripName;
     
     console.log('CTRL: Loading trip details for: ' + tripId);
-    this.statusCard.body('Loading stops for ' + tripName);
+    this.statusCard.body(loc('msg_trip_loading_format').replace('{trip}', tripName));
     this.statusCard.show();
     this.tripDetailsMenu.hide();
 
@@ -357,7 +389,7 @@ FutarController.prototype.showTripDetails = function(selectEvent) {
                 controller.statusCard.hide();
                 controller.tripDetailsMenu.show();
             } else {
-                controller.statusCard.body('No stops found.');
+                controller.statusCard.body(loc('msg_no_stops'));
             }
 
             console.log('CTRL: Trip details loaded.');
