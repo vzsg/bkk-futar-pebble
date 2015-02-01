@@ -4,7 +4,7 @@
         "location"
     ],
     "companyName": "Zsolt Varadi",
-    "longName": "FUT\u00c1R for Pebble",
+    "longName": "PebFUT\u00c1R",
     "projectType": "pebblejs",
     "resources": {
         "media": [
@@ -29,6 +29,21 @@
                 "type": "font"
             },
             {
+                "file": "images/action_info.png",
+                "name": "IMAGES_ACTION_INFO_PNG",
+                "type": "png"
+            },
+            {
+                "file": "images/action_unfav.png",
+                "name": "IMAGES_ACTION_UNFAV_PNG",
+                "type": "png"
+            },
+            {
+                "file": "images/action_fav.png",
+                "name": "IMAGES_ACTION_FAV_PNG",
+                "type": "png"
+            },
+            {
                 "file": "images/action_refresh.png",
                 "name": "IMAGES_ACTION_REFRESH_PNG",
                 "type": "png"
@@ -41,10 +56,10 @@
             }
         ]
     },
-    "shortName": "PEBFUT\u00c1R",
+    "shortName": "PebFUT\u00c1R",
     "uuid": "b2c43b45-87fa-41a8-b95f-150e737a6981",
     "versionCode": 1,
-    "versionLabel": "1.2",
+    "versionLabel": "1.4",
     "watchapp": {
         "watchface": false
     }
