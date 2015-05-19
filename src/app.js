@@ -61,7 +61,12 @@ function loc(key) {
 }
 
 function fixAccents(str) {
-    return decodeURIComponent(escape(str));    
+    try {
+        return decodeURIComponent(escape(str));
+    }
+    catch (err) {
+        return str;
+    }
 }
 
 function digitsToString(digit) {
