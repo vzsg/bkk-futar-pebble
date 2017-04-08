@@ -22,7 +22,7 @@ var localization = {
         'btn_refresh': 'Refresh',
         'btn_info': 'Trip info'
     },
-    
+
     'hu': {
         'error_generic_comm': 'Kommunikációs hiba!',
         'msg_location': 'Helymeghatározás…',
@@ -44,6 +44,8 @@ var localization = {
 
 
 /// Utilities
+
+
 function deg2rad(deg) {
     return deg * Math.PI / 180;
 }
@@ -56,7 +58,7 @@ function geoDistance(sLat, sLng, eLat, eLng, accuracy) {
 }
 
 function loc(key) {
-    var dict = localization[navigator.language] || localization.en;
+    var dict = localization[navigator.language.substring(0, 2)] || localization.en;
     return dict[key] || localization.en[key] || key;
 }
 
@@ -73,7 +75,10 @@ function digitsToString(digit) {
     return digit < 10 ? "0" + digit : String(digit);
 }
 
+
 /// Service class
+
+
 var FutarService = function (apiBaseUrl) {
     console.log('SRV: <init>');
     this.apiBaseUrl = apiBaseUrl || 'http://futar.bkk.hu/bkk-utvonaltervezo-api/ws/otp/api/where/';
@@ -86,7 +91,7 @@ FutarService.prototype.acquireLocation = function (callback) {
         'maximumAge': 30000,
         'enableHighAccuracy': true
     };
-    
+
     console.log('SRV: Acquiring location...');
     svc.position = null;
     navigator.geolocation.getCurrentPosition(
@@ -102,43 +107,43 @@ FutarService.prototype.acquireLocation = function (callback) {
         locationOptions);
 };
 
-FutarService.prototype.getStopsForLocation = function (lat, lon, radius, callback) {   
+FutarService.prototype.getStopsForLocation = function (lat, lon, radius, callback) {
     var svc = this,
         stopUrl = this.apiBaseUrl + 'stops-for-location.json' +
         '?lat=' + lat + '&lon=' + lon +
         '&radius=' + radius;
-    
+
     function parseStops(raw) {
         var dataObj = JSON.parse(raw),
             data = dataObj.data.stops || dataObj.data.list || [],
             stops = [],
             routes = dataObj.data.references.routes || {};
-        
+
         function lookupRoute(id) {
             return routes[id];
         }
-        
+
         function getRouteName(route) {
             return route.shortName || route.longName;
         }
-        
+
         for (var i = 0; i < data.length; ++i) {
             var dataItem = data[i],
                 routeIds = dataItem.routeIds || [];
-            
+
             if (!routeIds.length) continue;
 
             var stopName = fixAccents(dataItem.name),
                 matchingRoutes = routeIds.map(lookupRoute),
                 routeNames = matchingRoutes.map(getRouteName),
                 uniqueRouteNames = [];
-            
+
             for (var j = 0; j < routeNames.length; j++) {
                 if (uniqueRouteNames.indexOf(routeNames[j]) === -1) {
                     uniqueRouteNames.push(routeNames[j]);
                 }
             }
-            
+
             var title = uniqueRouteNames.join(', ');
             var item = {
                 title: title,
@@ -154,7 +159,7 @@ FutarService.prototype.getStopsForLocation = function (lat, lon, radius, callbac
             console.log('SRV: Stop "' + stopName + '" => ' + title + " (" + item.stop.distance + "m)");
             stops.push(item);
         }
-        
+
         stops.sort(function (s1, s2) {
             return s1.stop.distance - s2.stop.distance;
         });
@@ -162,7 +167,7 @@ FutarService.prototype.getStopsForLocation = function (lat, lon, radius, callbac
         console.log('SRV: Found ' + stops.length + ' stops.');
         callback({ items: stops });
     }
-    
+
     function reportError(error) {
         if (error.message) {
             console.warn('SRV: Stops request failed: ' + error.message);
@@ -170,7 +175,7 @@ FutarService.prototype.getStopsForLocation = function (lat, lon, radius, callbac
         } else {
             console.warn('SRV: Stops request failed: unknown');
             callback({ error: loc('error_generic_comm') });
-        } 
+        }
     }
 
     console.log('SRV: Stops request started: ' + stopUrl);
@@ -178,7 +183,7 @@ FutarService.prototype.getStopsForLocation = function (lat, lon, radius, callbac
 };
 
 FutarService.prototype.getDeparturesForStop = function(stopId, callback) {
-    var adUrl = this.apiBaseUrl + 'arrivals-and-departures-for-stop/' + stopId + '.json';            
+    var adUrl = this.apiBaseUrl + 'arrivals-and-departures-for-stop/' + stopId + '.json';
 
     function parseDepartures(raw) {
         var d = JSON.parse(raw), data, busTimes = [];
@@ -188,15 +193,27 @@ FutarService.prototype.getDeparturesForStop = function(stopId, callback) {
         } else {
             data = d.data.arrivalsAndDepartures || [];
         }
-        
+
         for (var i = 0; i < data.length; ++i) {
             var dataItem = data[i];
-            var predictTime;
-            
-            predictTime = dataItem.predictedArrivalTime || dataItem.scheduledArrivalTime || 0;
-            
+            var predictTime = dataItem.predictedArrivalTime || dataItem.scheduledArrivalTime || 0;
+
+            if (predictTime > 0)
+            {
+                predictTime = (predictTime - d.currentTime) / 1000; // time remaining in seconds
+                if (predictTime < 0) { // at the stop / allready left
+                    predictTime = "0:00";
+                } else if (predictTime < 120) { // 2 minutes
+                    predictTime = Math.floor(predictTime / 60) + ":" + digitsToString(Math.floor(predictTime % 60)); // "m:ss" format
+                } else {
+                    predictTime = Math.ceil(predictTime / 60) + "'"; // "m'" format
+                }
+            } else {
+                predictTime = '?';
+            }
+
             var item = {
-                title: (predictTime ? (Math.ceil((predictTime - d.currentTime) / (60 * 1000)) + "'") : '?') + ' - ' + fixAccents(dataItem.routeShortName),
+                title: predictTime + " - " + fixAccents(dataItem.routeShortName),
                 subtitle: '> ' + fixAccents(dataItem.tripHeadsign),
                 extras: {
                     tripName: fixAccents(dataItem.routeShortName) + ' > ' + fixAccents(dataItem.tripHeadsign),
@@ -204,14 +221,14 @@ FutarService.prototype.getDeparturesForStop = function(stopId, callback) {
                     tripId: dataItem.tripId
                 }
             };
-            
+
             busTimes.push(item);
         }
-        
+
         console.log('SRV: Found ' + busTimes.length + ' departures.');
         callback({items: busTimes});
     }
-    
+
     function reportError(error) {
         if (error.message) {
             console.warn('SRV: Departures request failed: ' + error.message);
@@ -219,9 +236,9 @@ FutarService.prototype.getDeparturesForStop = function(stopId, callback) {
         } else {
             console.warn('SRV: Departures request failed: unknown');
             callback({ error: loc('error_generic_comm') });
-        } 
+        }
     }
-    
+
     console.log('SRV: Departures request started: ' + adUrl);
     ajax(adUrl, parseDepartures, reportError);
 };
@@ -229,32 +246,35 @@ FutarService.prototype.getDeparturesForStop = function(stopId, callback) {
 FutarService.prototype.getTripDetails = function (tripId, callback) {
     var detailUrl = this.apiBaseUrl + 'trip-details.json' +
         '?tripId=' + tripId;
-    
+
     function parseStops(raw) {
         var dataObj = JSON.parse(raw),
             data = dataObj.data.entry.stopTimes || [],
             stops = [],
             refStops = dataObj.data.references.stops || {};
-        
+
         for (var i = 0; i < data.length; ++i) {
             var dataItem = data[i], stop = refStops[dataItem.stopId],
                 stopName = fixAccents(stop.name),
                 arrivalTime = new Date((dataItem.predictedArrivalTime || dataItem.arrivalTime || dataItem.predictedDepartureTime || dataItem.departureTime) * 1000),
-                arrivalHours = digitsToString(arrivalTime.getHours()), arrivalMinutes = digitsToString(arrivalTime.getMinutes());
-                
+                arrivalHours = digitsToString(arrivalTime.getHours()),
+                arrivalMinutes = digitsToString(arrivalTime.getMinutes());
+
             var item = {
                 title: arrivalHours + ":" + arrivalMinutes,
                 subtitle: stopName,
-                trip: dataItem
+                extras: {
+                    stopId: dataItem.stopId
+                }
             };
-            
+
             stops.push(item);
         }
-        
+
         console.log('SRV: Found ' + stops.length + ' stops.');
         callback({ items: stops });
     }
-    
+
     function reportError(error) {
         if (error.message) {
             console.warn('SRV: Trip details request failed: ' + error.message);
@@ -262,11 +282,11 @@ FutarService.prototype.getTripDetails = function (tripId, callback) {
         } else {
             console.warn('SRV: Trip details request failed: unknown');
             callback({ error: loc('error_generic_comm') });
-        } 
+        }
     }
 
     console.log('SRV: Trip details request started: ' + detailUrl);
-    ajax(detailUrl, parseStops, reportError);                        
+    ajax(detailUrl, parseStops, reportError);
 };
 
 FutarService.prototype.getFavorites = function() {
@@ -282,14 +302,14 @@ FutarService.prototype.getFavorites = function() {
 FutarService.prototype.isFavorite = function(stop) {
     var favorites = this.getFavorites();
     return favorites.some(function (s) {
-        return s.stop.id === stop.stop.id;                    
+        return s.stop.id === stop.stop.id;
     });
 };
 
 FutarService.prototype.setFavorite = function(stop, fav) {
     var favorites = this.getFavorites(),
         isFav = this.isFavorite(stop);
-    
+
     if (!isFav && fav) {
         favorites.push(stop);
         this.favoriteStops = favorites;
@@ -300,7 +320,10 @@ FutarService.prototype.setFavorite = function(stop, fav) {
     }
 };
 
+
 /// Controller
+
+
 function FutarController(service) {
     console.log('CTRL: <init>');
     this.service = service;
@@ -337,7 +360,7 @@ FutarController.prototype.retryLastCall = function(clickEvent) {
 
 FutarController.prototype.refreshStops = function() {
     var controller = this;
-    
+
     console.log('CTRL: Updating nearby stops...');
 
     this.statusCard.body(loc('msg_location'));
@@ -346,8 +369,8 @@ FutarController.prototype.refreshStops = function() {
     this.setRetryAction(null);
     this.updateFavorites();
 
-    this.stopMenu.section(2, {
-        title: loc('title_tools'),
+    this.stopMenu.section(0, {
+        // title: loc('title_tools'),
         items: [ { title: loc('btn_refresh'), icon: 'images/action_refresh.png' }]
     });
 
@@ -363,10 +386,11 @@ FutarController.prototype.refreshStops = function() {
                     controller.statusCard.body(stopsRes.error);
                 } else {
                     if (stopsRes.items.length) {
-                        controller.stopMenu.section(0, {
+                        controller.stopMenu.section(1, {
                             title: loc('title_nearby_stops'),
                             items: stopsRes.items
                         });
+                        controller.stopMenu.selection(1, 0); // select first stop
 
                         controller.statusCard.hide();
                         controller.stopMenu.show();
@@ -383,7 +407,7 @@ FutarController.prototype.refreshStops = function() {
 
 FutarController.prototype.showDeparturesForStop = function(selectEvent) {
     var controller = this, stopId = selectEvent.item.stop.id, stopName = selectEvent.item.stop.name;
-    
+
     console.log('CTRL: Updating departures for stop: ' + stopId);
     this.statusCard.body(loc('msg_departure_loading_format').replace('{stop}', stopName));
     this.statusCard.show();
@@ -394,18 +418,23 @@ FutarController.prototype.showDeparturesForStop = function(selectEvent) {
     var favorite = this.service.isFavorite(selectEvent.item);
 
     var toolsSection = {
-            title: loc('title_tools'),
-            items: [{
-                title: favorite ? loc('btn_unfavorite') : loc('btn_favorite'),
-                icon: favorite ? 'images/action_unfav.png' : 'images/action_fav.png'
-            }, {
-                title: loc('btn_info'),
-                icon: 'images/action_info.png'
-            },
-            {
-                title: loc('btn_refresh'),
-                icon: 'images/action_refresh.png'
-            }]};
+        title: loc('title_tools'),
+        items: [{
+            title: favorite ? loc('btn_unfavorite') : loc('btn_favorite'),
+            icon: favorite ? 'images/action_unfav.png' : 'images/action_fav.png'
+        }, {
+            title: loc('btn_info'),
+            icon: 'images/action_info.png'
+        }, {
+            title: loc('btn_refresh'),
+            icon: 'images/action_refresh.png'
+        }]
+    };
+
+    this.departureMenu.section(0, {
+        // title: loc('title_tools'),
+        items: [ { title: loc('btn_refresh'), icon: 'images/action_refresh.png' }]
+    });
 
     this.service.getDeparturesForStop(stopId, function (res) {
         controller.setRetryAction('departure');
@@ -414,12 +443,14 @@ FutarController.prototype.showDeparturesForStop = function(selectEvent) {
             controller.statusCard.body(res.error);
         } else {
             if (res.items.length) {
-                controller.departureMenu.section(0, {
+                controller.departureMenu.section(1, {
                     title: stopName,
                     items: res.items
                 });
 
-                controller.departureMenu.section(1, toolsSection);
+                controller.departureMenu.section(2, toolsSection);
+
+                controller.departureMenu.selection(1, 0); // select first departure
 
                 controller.statusCard.hide();
                 controller.departureMenu.show();
@@ -457,22 +488,20 @@ FutarController.prototype.showDetailsForStop = function(selectEvent) {
 };
 
 FutarController.prototype.handleStopSelect = function(selectEvent) {
-    switch (selectEvent.sectionIndex) {
-    case 0:
-    case 1:
-        this.showDeparturesForStop(selectEvent);
-        break;
-    case 2:
+    if (selectEvent.sectionIndex === 0) {
         this.refreshStops();
-        break;
-    }
+    } else {
+        this.showDeparturesForStop(selectEvent);
+    } 
 };
 FutarController.prototype.handleTripSelect = function(selectEvent) {
     if (selectEvent.sectionIndex === 0) {
-        this.showTripDetails(selectEvent);
+        this.refreshDepartures();
     } else if (selectEvent.sectionIndex === 1) {
+        this.showTripDetails(selectEvent);
+    } else if (selectEvent.sectionIndex === 2) {
         switch (selectEvent.itemIndex) {
-        case 0:                            
+        case 0:
             this.toggleFavoriteStop(this.currentStopEvent);
             break;
         case 1:
@@ -482,7 +511,7 @@ FutarController.prototype.handleTripSelect = function(selectEvent) {
             this.refreshDepartures();
             break;
         }
-        
+
     }
 };
 
@@ -506,6 +535,14 @@ FutarController.prototype.showTripDetails = function(selectEvent) {
                     items: res.items
                 });
 
+                // select actual stop from the list
+                for (var j = 0; j < res.items.length; j++) {
+                    if (res.items[j].extras.stopId == controller.currentStopEvent.item.stop.id) {
+                         controller.tripDetailsMenu.selection(0, j);
+                         break;
+                    }
+                }
+
                 controller.statusCard.hide();
                 controller.tripDetailsMenu.show();
             } else {
@@ -514,7 +551,7 @@ FutarController.prototype.showTripDetails = function(selectEvent) {
 
             console.log('CTRL: Trip details loaded.');
         }
-    });    
+    });
 };
 
 
@@ -523,7 +560,7 @@ FutarController.prototype.toggleFavoriteStop = function(stopEvent) {
     var newFavorite = !this.service.isFavorite(stop);
     console.log('CTRL: setting favorite state of ' + stop.stop.id + ' to: ' + newFavorite);
     this.service.setFavorite(stop, newFavorite);
-    this.departureMenu.item(1, 0, {
+    this.departureMenu.item(2, 0, {
         title: newFavorite ? loc('btn_unfavorite') : loc('btn_favorite'),
         icon: newFavorite ? 'images/action_unfav.png' : 'images/action_fav.png'
     });
@@ -533,11 +570,14 @@ FutarController.prototype.toggleFavoriteStop = function(stopEvent) {
 
 FutarController.prototype.updateFavorites = function() {
     var favorites = this.service.getFavorites();
-    console.log(JSON.stringify(favorites));
-    this.stopMenu.section(1, { title: loc('title_favorite_stops'), items: favorites.length ? favorites : [] });
+    console.log("Favorites JSON: " + JSON.stringify(favorites));
+    this.stopMenu.section(2, { title: loc('title_favorite_stops'), items: favorites.length ? favorites : [] });
 };
 
+
 /// Application
+
+
 function FutarApplication() {
     console.log('APP: <init>');
     var service = new FutarService();
